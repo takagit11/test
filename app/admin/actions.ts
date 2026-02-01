@@ -2,18 +2,30 @@
 
 import { supabase } from "@/lib/supabase";
 
+type Shop = { name: string; slug: string };
+
 export type ReservationItem = {
   id: string;
   start_at: string;
   name: string;
   contact: string;
-  shop: { name: string; slug: string } | null;
+  shop: Shop | null; // 画面側は「単体 or null」で扱う
 };
 
 export type AdminState = {
   error?: string;
   date?: string;
   reservations?: ReservationItem[];
+};
+
+// Supabaseのネスト取得は、関係の推論によって shop が「配列」で返ることがあります。
+// その場合でもビルドが通るように、ここで吸収します。
+type ReservationRowFromDb = {
+  id: string;
+  start_at: string;
+  name: string;
+  contact: string;
+  shop: Shop | Shop[] | null;
 };
 
 export async function fetchReservations(
@@ -45,5 +57,16 @@ export async function fetchReservations(
     return { error: "予約データの取得に失敗しました。" };
   }
 
-  return { reservations: data ?? [], date };
+  const rows = (data ?? []) as unknown as ReservationRowFromDb[];
+
+  // shop が配列で返ってきても、先頭1件を取って単体に正規化する
+  const reservations: ReservationItem[] = rows.map((r) => ({
+    id: r.id,
+    start_at: r.start_at,
+    name: r.name,
+    contact: r.contact,
+    shop: Array.isArray(r.shop) ? (r.shop[0] ?? null) : (r.shop ?? null),
+  }));
+
+  return { reservations, date };
 }
